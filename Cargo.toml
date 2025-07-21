@@ -1,11 +1,11 @@
 [package]
 name = "hashmoney"
-description = "Yet another hashcash rust implementation, with wasm support and variable date width but no version 0 support planned this time."
+description = "Yet another hashcash rust implementation, with wasm support, variable date width and multiple minting strategies but no version 0 support."
 version = "1.0.0"
 edition = "2024"
 authors = ["Leonardo <128467278+le0flo@users.noreply.github.com>"]
 license = "LGPL-3.0"
-keywords = ["hashcash", "hash", "cash", "antispam"]
+keywords = ["hashcash", "hash", "cash", "antispam", "hashmoney", "crypto"]
 repository = "https://github.com:/le0flo/hashmoney"
 
 [dependencies]
