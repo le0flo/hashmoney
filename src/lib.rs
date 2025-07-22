@@ -11,6 +11,8 @@ pub enum MintStrategy {
     Naive,
 }
 
+pub type CheckResult = std::result::Result<(), CheckError>;
+
 pub enum CheckError {
     VerParse,
     VerInvalid,
@@ -76,6 +78,13 @@ impl Token {
     }
 }
 
+/// Mints a stamp given the number of bits, the date width, the resource and the strategy.
+///
+/// # Example
+///
+/// ```
+/// let stamp: String = hashmoney::mint(10, 6, &"foo".to_string(), hashmoney::MintStrategy::Naive);
+/// ```
 pub fn mint(bits: u32, date_width: u8, resource: &String, strategy: MintStrategy) -> String {
     let mut rand = [0 as u8; 12];
     rand::rng().fill(&mut rand);
@@ -97,7 +106,14 @@ pub fn mint(bits: u32, date_width: u8, resource: &String, strategy: MintStrategy
     }
 }
 
-pub fn check(stamp: &String, bits: u32, days: u8, resource: &String) -> Result<(), CheckError> {
+/// Checks wheter a given string is a valid stamp, by checking it against a known number of bits, days of validity and the resource string.
+///
+/// # Example
+///
+/// ```
+/// let is_valid: hashmoney::CheckResult = hashmoney::check(&"1:10:250722:foo::yzCsYz5/JRnUwvvD:00000000000000000c".to_string(), 10, 2, &"foo".to_string());
+/// ```
+pub fn check(stamp: &String, bits: u32, days: u8, resource: &String) -> CheckResult {
     let mut iter = stamp.split(":");
 
     let stamp_ver = iter.next()
