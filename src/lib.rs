@@ -1,3 +1,16 @@
+//! This is yet another implementation of [hashcash](hashcash.org), but also very different.
+//! It has a way simple interface, so that the resulting workflow is more like using the command line version.
+//! You can either mint a stamp, or check if it is valid.
+//! Only version 1 of the specification is implemented.
+//! The Web assembly target is a first class citizen and fully supported with the `wasm` feature.
+
+extern crate base64;
+extern crate chrono;
+extern crate rand;
+extern crate sha1;
+
+use std::fmt::Display;
+
 use base64::{prelude::BASE64_STANDARD_NO_PAD, Engine};
 use chrono::NaiveDateTime;
 use rand::Rng;
@@ -15,15 +28,34 @@ pub type CheckResult = std::result::Result<(), CheckError>;
 
 pub enum CheckError {
     VerParse,
+    BitsParse,
+    DateParse,
+    ResourceParse,
     VerInvalid,
     FieldNumberInvalid,
-    BitsParse,
     BitsInvalid,
-    DateParse,
     DateInvalid,
-    ResourceParse,
     ResourceInvalid,
     StampInvalid,
+}
+
+impl Display for CheckError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let err_str = match self {
+            Self::VerParse => "Couldn't parse the version number",
+            Self::BitsParse => "Couldn't parse the bits number, probably not a number",
+            Self::DateParse => "Couldn't parse the date field",
+            Self::ResourceParse => "Couldn't parse the resource field",
+            Self::VerInvalid => "The version number is invalid (ver != 1)",
+            Self::FieldNumberInvalid => "The number of fields detected is not valid (field_number != 7)",
+            Self::BitsInvalid => "The bits from the stamp doesn't match the bits given to the function",
+            Self::DateInvalid => "The date is invalid",
+            Self::ResourceInvalid => "The resource from the stamp doesn't match the resource given to the function",
+            Self::StampInvalid => "Number of leading zeros if different from the one promised by the bits field",
+        };
+
+        return f.write_str(err_str);
+    }
 }
 
 #[derive(Clone)]
