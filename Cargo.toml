@@ -1,7 +1,7 @@
 [package]
 name = "hashmoney"
 description = "Yet another hashcash rust implementation, with wasm support, variable date width and multiple minting strategies but no version 0 support."
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 authors = ["Leonardo <128467278+le0flo@users.noreply.github.com>"]
 license = "LGPL-3.0"
@@ -9,14 +9,14 @@ keywords = ["hashcash", "hashmoney", "crypto", "spam", "pow"]
 repository = "https://github.com:/le0flo/hashmoney"
 documentation = "https://docs.rs/hashmoney"
 
-[[bin]]
-bench = false
-name = "hashmoney-example"
-path = "src/main.rs"
-
 [lib]
 name = "hashmoney"
 path = "src/lib.rs"
+
+[[bin]]
+bench = false
+name = "hm"
+path = "src/main.rs"
 
 [dependencies]
 rand = { version = "0.9" }
