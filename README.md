@@ -1,11 +1,8 @@
 # Hashmoney
 
-> [!WARNING]
-> Work in progress
-
-This is yet another implementation of [hashcash](hashcash.org), but also very different.
+This is yet another implementation of [hashcash](hashcash.org).
 It has a way simple interface, so that the resulting workflow is more like using the command line version.
-You can either mint a stamp, or check if it is valid.
+You can either mint a stamp or parse it from a string, then check if it is valid against some given values.
 Only version 1 of the specification is implemented.
 The Web assembly target is a first class citizen and fully supported with the `wasm` feature.
 
@@ -13,5 +10,5 @@ The Web assembly target is a first class citizen and fully supported with the `w
 
 ```toml
 [dependencies]
-hashmoney = { version = "1.0.0" }
+hashmoney = { version = "2.0.0" }
 ```
