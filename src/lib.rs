@@ -1,6 +1,6 @@
-//! This is yet another implementation of [hashcash](hashcash.org), but also very different.
+//! This is yet another implementation of [hashcash](hashcash.org).
 //! It has a way simple interface, so that the resulting workflow is more like using the command line version.
-//! You can either mint a stamp, or check if it is valid.
+//! You can either mint a stamp or parse it from a string, then check if it is valid against some given values.
 //! Only version 1 of the specification is implemented.
 //! The Web assembly target is a first class citizen and fully supported with the `wasm` feature.
 
@@ -12,13 +12,12 @@ extern crate sha1;
 use std::fmt::Display;
 
 use base64::{prelude::BASE64_STANDARD_NO_PAD, Engine};
-use chrono::NaiveDateTime;
+use chrono::{Duration, NaiveDateTime};
 use rand::Rng;
-
-#[cfg(test)]
-mod test;
+use sha1::{Digest, Sha1};
 
 mod utils;
+mod parser;
 
 pub enum MintStrategy {
     Naive,
@@ -27,12 +26,6 @@ pub enum MintStrategy {
 pub type CheckResult = std::result::Result<(), CheckError>;
 
 pub enum CheckError {
-    VerParse,
-    BitsParse,
-    DateParse,
-    ResourceParse,
-    VerInvalid,
-    FieldNumberInvalid,
     BitsInvalid,
     DateInvalid,
     ResourceInvalid,
@@ -42,12 +35,6 @@ pub enum CheckError {
 impl Display for CheckError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let err_str = match self {
-            Self::VerParse => "Couldn't parse the version number",
-            Self::BitsParse => "Couldn't parse the bits number, probably not a number",
-            Self::DateParse => "Couldn't parse the date field",
-            Self::ResourceParse => "Couldn't parse the resource field",
-            Self::VerInvalid => "The version number is invalid (ver != 1)",
-            Self::FieldNumberInvalid => "The number of fields detected is not valid (field_number != 7)",
             Self::BitsInvalid => "The bits from the stamp doesn't match the bits given to the function",
             Self::DateInvalid => "The date is invalid",
             Self::ResourceInvalid => "The resource from the stamp doesn't match the resource given to the function",
@@ -59,116 +46,137 @@ impl Display for CheckError {
 }
 
 #[derive(Clone)]
-struct Token {
+pub struct Stamp {
     pub ver: u8,
     pub bits: u32,
     pub date: NaiveDateTime,
-    pub date_width: u8,
+    pub date_width: usize,
     pub resource: String,
     pub ext: String,
-    pub rand: Vec<u8>,
-    pub counter: u64,
+    pub rand: String,
+    pub counter: String,
 }
 
-impl Token {
-    fn to_string(&self) -> String {
-        let date_format = match self.date_width {
-            10 => "%y%m%d%H%M".to_string(),
-            12 => "%y%m%d%H%M%S".to_string(),
-            _ => "%y%m%d".to_string(),
+impl Stamp {
+    fn date_format(&self) -> &str {
+        return match self.date_width {
+            10 => "%y%m%d%H%M",
+            12 => "%y%m%d%H%M%S",
+            _ => "%y%m%d",
         };
+    }
 
-        let rand = BASE64_STANDARD_NO_PAD.encode(&self.rand);
-        let counter = BASE64_STANDARD_NO_PAD.encode(self.counter.to_string());
+    fn parse_counter(&mut self, counter: u32) {
+        self.counter = BASE64_STANDARD_NO_PAD.encode(counter.to_be_bytes());
+    }
 
-        let mut temp = format!(
-            "{}:{}:{}:{}:{}:{}:",
+    /// Formats the stamp struct into a valid string
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use hashmoney::{MintStrategy, Stamp};
+    ///
+    /// let stamp: Stamp = hashmoney::mint(10, 6, &"foo".to_string(), MintStrategy::Naive);
+    /// println!("hashcash stamp: {}", stamp.to_string()); // hashcash stamp: 1:10:250730:foo::DopVzWEUmumAk+G4:00000000000000000K
+    /// ```
+    pub fn to_string(&self) -> String {
+        return format!(
+            "{}:{}:{}:{}:{}:{}:{}",
             self.ver.to_string(),
             self.bits.to_string(),
-            self.date.format(&date_format),
+            self.date.format(self.date_format()),
             self.resource,
             self.ext,
-            rand,
+            self.rand,
+            self.counter,
         );
-
-        for _ in 0..(53 - temp.len() - counter.len() - 1) {
-            temp.push('0');
-        }
-
-        temp.push_str(counter.as_str());
-        return temp;
     }
 
-    fn strategy_naive(&mut self) -> String {
+    fn strategy_naive(&mut self) -> Self {
+        let mut counter = 0;
+
         loop {
-            if check(&self.to_string(), self.bits, 1, &self.resource).is_ok() {
-                return self.to_string();
+            self.parse_counter(counter);
+
+            if self.check(self.bits, 1, &self.resource).is_ok() {
+                return self.clone();
             }
 
-            self.counter += 1;
+            counter += 1;
         }
     }
-}
 
-/// Mints a stamp given the number of bits, the date width, the resource and the strategy.
-///
-/// # Example
-///
-/// ```
-/// let stamp: String = hashmoney::mint(10, 6, &"foo".to_string(), hashmoney::MintStrategy::Naive);
-/// ```
-pub fn mint(bits: u32, date_width: u8, resource: &String, strategy: MintStrategy) -> String {
-    let mut rand = [0 as u8; 12];
-    rand::rng().fill(&mut rand);
-    let today = utils::current_naive_date_time();
+    /// Mints a stamp given the number of bits, date width, resource and strategy.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use hashmoney::{MintStrategy, Stamp};
+    ///
+    /// let stamp: Stamp = hashmoney::mint(10, 6, &"foo".to_string(), MintStrategy::Naive);
+    /// ```
+    pub fn mint(bits: u32, date_width: usize, resource: &String, strategy: MintStrategy) -> Self {
+        let today = utils::current_naive_date_time();
+        let mut rand = [0 as u8; 12];
+        rand::rng().fill(&mut rand);
 
-    let mut stamp = Token {
-        ver: 1,
-        bits,
-        date: today,
-        date_width,
-        resource: resource.clone(),
-        ext: "".to_string(),
-        rand: rand.to_vec(),
-        counter: 0,
-    };
+        let mut stamp = Self {
+            ver: 1,
+            bits,
+            date: today,
+            date_width,
+            resource: resource.clone(),
+            ext: "".to_string(),
+            rand: BASE64_STANDARD_NO_PAD.encode(rand.to_vec()),
+            counter: "".to_string(),
+        };
 
-    return match strategy {
-        MintStrategy::Naive => stamp.strategy_naive(),
+        return match strategy {
+            MintStrategy::Naive => stamp.strategy_naive(),
+        }
     }
-}
 
-/// Checks wheter a given string is a valid stamp, by checking it against a known number of bits, days of validity and the resource string.
-///
-/// # Example
-///
-/// ```
-/// let is_valid: hashmoney::CheckResult = hashmoney::check(&"1:10:250722:foo::yzCsYz5/JRnUwvvD:00000000000000000c".to_string(), 10, 2, &"foo".to_string());
-/// ```
-pub fn check(stamp: &String, bits: u32, days: u8, resource: &String) -> CheckResult {
-    let mut iter = stamp.split(":");
+    /// Checks wheter the stamp is valid, by checking it against a known number of bits, days of validity and resource string.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use hashmoney::{MintStrategy, Stamp};
+    ///
+    /// let stamp: Stamp = hashmoney::mint(10, 6, &"foo".to_string(), MintStrategy::Naive);
+    /// assert!(stamp.check(10, 1, &"foo".to_string).is_ok());
+    /// ```
+    pub fn check(&self, expected_bits: u32, days_until_expiration: u32, expected_resource: &String) -> CheckResult {
+        if self.bits != expected_bits {
+            return Err(CheckError::BitsInvalid);
+        }
 
-    let stamp_ver = iter.next()
-        .ok_or(CheckError::VerParse)?
-        .parse::<u8>()
-        .map_err(|_| CheckError::VerParse)?;
+        if (utils::current_naive_date_time() - self.date) >= Duration::days(days_until_expiration as i64) {
+            return Err(CheckError::DateInvalid);
+        }
 
-    let stamp_bits = iter.next()
-        .ok_or(CheckError::BitsParse)?
-        .parse::<u32>()
-        .map_err(|_| CheckError::BitsParse)?;
+        if self.resource.ne(expected_resource) {
+            return Err(CheckError::ResourceInvalid);
+        }
 
-    let stamp_date_str = iter.next().ok_or(CheckError::DateParse)?;
+        let mut hasher = Sha1::new();
+        hasher.update(self.to_string());
+        let hashed = hasher.finalize();
 
-    let stamp_resource = iter.next()
-        .ok_or(CheckError::ResourceParse)?
-        .to_string();
+        let mut zeros = 0;
+        for byte in hashed {
+            zeros += byte.leading_zeros();
 
-    utils::check_version(stamp_ver, 4 + iter.count())?;
-    utils::check_date(stamp_date_str, days)?;
-    utils::check_bits(stamp_bits, bits)?;
-    utils::check_resource(&stamp_resource, resource)?;
-    utils::check_stamp(stamp, bits)?;
+            if byte.leading_zeros() < 8 {
+                break;
+            }
+        }
 
-    return Ok(());
+        if zeros < self.bits {
+            return Err(CheckError::StampInvalid);
+        }
+
+        return Ok(());
+    }
 }
