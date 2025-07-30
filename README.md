@@ -1,6 +1,6 @@
 # Hashmoney
 
-This is yet another implementation of [hashcash](hashcash.org).
+Yet another implementation of [hashcash](hashcash.org).
 It has a way simple interface, so that the resulting workflow is more like using the command line version.
 You can either mint a stamp or parse it from a string, then check if it is valid against some given values.
 Only version 1 of the specification is implemented.
