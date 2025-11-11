@@ -9,7 +9,7 @@
     pkgs = nixpkgs.legacyPackages.${system};
   in {
     devShells.${system}.default = pkgs.mkShell {
-      buildInputs = with pkgs; [
+      packages = with pkgs; [
         cargo rustc rust-analyzer
       ];
 
