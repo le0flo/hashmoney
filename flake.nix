@@ -9,9 +9,7 @@
     pkgs = nixpkgs.legacyPackages.${system};
   in {
     devShells.${system}.default = pkgs.mkShell {
-      packages = with pkgs; [
-        cargo rustc rust-analyzer
-      ];
+      packages = with pkgs; [ cargo rustc rust-analyzer ];
 
       env.RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
     };
